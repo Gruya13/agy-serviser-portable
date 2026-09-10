@@ -2,9 +2,11 @@
 .SYNOPSIS
     Glavni orkestrator za Antigravity CLI Prenosivi Servisni Asistent.
 .DESCRIPTION
-    Ova skripta proverava internet vezu, detektuje radni medijum,
-    aktivira USB samozaštitu i samočišćenje od virusa, izoluje korisnički profil,
-    omogućava trajnu prijavu na otključanom USB-u i osigurava čist izlaz.
+    Ova skripta proverava internet vezu, aktivira USB samozastitu,
+    automatski identifikuje klijentski racunar po serijskom broju,
+    kreira digitalni servisni karton (devices\<DeviceTag>),
+    odvaja sesije/cetove po masinama, omogucava nastavak razgovora za isti racunar,
+    i zadrzava trajnu deljenu prijavu na USB medijumu bez ponovne autorizacije.
 #>
 
 [CmdletBinding()]
@@ -26,6 +28,7 @@ Write-Host ""
 $scriptDir = $PSScriptRoot
 $binPath = Join-Path $scriptDir "bin\agy.exe"
 $protectScript = Join-Path $scriptDir "scripts\Protect-USBIntegrity.ps1"
+$deviceScript = Join-Path $scriptDir "scripts\Get-DeviceInfo.ps1"
 
 # 1. Provera postojanja agy.exe
 if (-not (Test-Path $binPath)) {
@@ -100,7 +103,42 @@ if (-not (Test-Path $profileDir)) {
     New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
 }
 
-# 5. Postavljanje izolacije okruzenja
+# 5. Identifikacija klijentskog racunara i servisni karton (devices\<DeviceTag>)
+$devicesBaseDir = if ($isUsingTemp) { Join-Path $profileDir "devices" } else { Join-Path $scriptDir "devices" }
+if (-not (Test-Path $devicesBaseDir)) { New-Item -ItemType Directory -Path $devicesBaseDir -Force | Out-Null }
+
+$device = $null
+$workDir = $scriptDir
+
+if (Test-Path $deviceScript) {
+    Write-Host "`n[*] Ocitavanje identifikacije i hardvera klijentskog racunara..." -ForegroundColor Yellow
+    $device = & $deviceScript -TargetDevicesDir $devicesBaseDir
+    if ($device) {
+        $workDir = $device.DeviceFolder
+        Write-Host "------------------------------------------------------------------" -ForegroundColor Cyan
+        Write-Host "IDENTIFIKOVAN KLIJENTSKI RACUNAR:" -ForegroundColor Yellow
+        Write-Host "  - Uredjaj:       $($device.Manufacturer) $($device.Model)" -ForegroundColor White
+        Write-Host "  - Serijski broj: $($device.SerialNumber)" -ForegroundColor Green
+        Write-Host "  - Hardver:       $($device.CPU) | $($device.RAMGB) GB RAM" -ForegroundColor Gray
+        Write-Host "  - Servisni folder: $($device.DeviceFolder)" -ForegroundColor DarkGray
+        Write-Host "------------------------------------------------------------------" -ForegroundColor Cyan
+
+        # Sinhronizacija AGENTS.md, skripti i vestina u radni folder uredjaja
+        $deviceAgentsMd = Join-Path $workDir "AGENTS.md"
+        Copy-Item (Join-Path $scriptDir "AGENTS.md") $deviceAgentsMd -Force -ErrorAction SilentlyContinue
+
+        $deviceSkills = Join-Path $workDir ".agents"
+        if (-not (Test-Path $deviceSkills)) {
+            Copy-Item (Join-Path $scriptDir ".agents") $deviceSkills -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        $deviceScripts = Join-Path $workDir "scripts"
+        if (-not (Test-Path $deviceScripts)) {
+            Copy-Item (Join-Path $scriptDir "scripts") $deviceScripts -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+# 6. Postavljanje izolacije okruzenja
 $originalUserProfile = $env:USERPROFILE
 $originalHome = $env:HOME
 $originalSSHClient = $env:SSH_CLIENT
@@ -109,27 +147,43 @@ $originalSSHTTY = $env:SSH_TTY
 $env:USERPROFILE = $profileDir
 $env:HOME = $profileDir
 
-# Forsiranje headless/remote autorizacije ako nismo ulogovani (sprecava pokretanje klijentskog browsera)
+# Forsiranje headless/remote autorizacije ako nismo ulogovani
 $env:SSH_CLIENT = "127.0.0.1 12345 22"
 $env:SSH_TTY = "/dev/pts/0"
 
 Write-Host "[*] Headless OAuth zastita aktivna (autorizacija se vrsi preko telefona)." -ForegroundColor Cyan
-Write-Host "------------------------------------------------------------------" -ForegroundColor DarkGray
 
-# 6. Priprema argumenata za Antigravity CLI
+# 7. Priprema argumenata za Antigravity CLI i ponuda nastavka sesije
 $cliArgs = @()
 if ($Model) {
     $cliArgs += "--model"
     $cliArgs += $Model
 }
 
-# 7. Pokretanje sesije
+# Ako je racunar vec bio servisiran, ponuditi nastavak prethodnog razgovora za taj racunar
+if ($device -and $device.IsExistingDevice) {
+    Write-Host "`n[!] Ovaj racunar je vec evidentiran u servisnoj bazi!" -ForegroundColor Cyan
+    Write-Host "    [1] Nastavi prethodni razgovor/sesiju za ovaj racunar (agy -c)" -ForegroundColor Green
+    Write-Host "    [2] Zapocni novu dijagnosticku sesiju za ovaj racunar" -ForegroundColor White
+    $izborSesije = Read-Host "Izaberite opciju (1/2, podrazumevano 1)"
+    if ($izborSesije -ne '2') {
+        $cliArgs += "-c"
+        Write-Host "[*] Ucitavam prethodni razgovor za uredjaj $($device.DeviceTag)..." -ForegroundColor Green
+    } else {
+        Write-Host "[*] Otvaram novu sesiju za uredjaj $($device.DeviceTag)..." -ForegroundColor Yellow
+    }
+}
+
+Write-Host "------------------------------------------------------------------" -ForegroundColor DarkGray
+
+# 8. Pokretanje sesije u radnom prostoru uredjaja
 try {
-    Set-Location $scriptDir
-    Write-Host "[*] Pokrecem Antigravity CLI sesiju... (za izlaz unesite /exit ili Ctrl+D)" -ForegroundColor Yellow
+    Set-Location $workDir
+    Write-Host "[*] Pokrecem Antigravity CLI sesiju za ovaj uredjaj... (izlaz: /exit ili Ctrl+D)" -ForegroundColor Yellow
     Write-Host ""
     & $binPath $cliArgs
 } finally {
+    Set-Location $scriptDir
     Write-Host ""
     Write-Host "------------------------------------------------------------------" -ForegroundColor DarkGray
     Write-Host "[*] Zavrsavanje sesije i post-sesijsko ciscenje..." -ForegroundColor Cyan

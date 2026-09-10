@@ -41,6 +41,7 @@ USB:\ServisAI\
 │   └── settings.json             # Postavke modela (gemini-2.5-pro) i pravila rada
 │
 ├── scripts\                      # Nativne PowerShell servisne dijagnostičke skripte
+│   ├── Get-DeviceInfo.ps1        # Identifikacija serijskog broja i hardverske karte
 │   ├── Get-DiskHealth.ps1        # SMART i NVMe provera, radni vek i greške
 │   ├── Get-EventLogTriage.ps1    # Analiza kriticnih padova (Kernel-Power, WHEA)
 │   ├── Get-MinidumpReport.ps1    # Analiza BSOD rušenja i oštećenih drajvera
@@ -49,6 +50,7 @@ USB:\ServisAI\
 │   └── Protect-USBIntegrity.ps1  # Samoodbrana, imunizacija i čišćenje USB-a
 │
 ├── .agents\skills\               # Servisne veštine koje agent autonomno koristi
+│   ├── device-audit\SKILL.md     # Veština za hardversku kartu i serijski broj
 │   ├── smart-health\SKILL.md     # Veština za dijagnostiku diskova
 │   ├── event-log-triage\SKILL.md # Veština za trijažu logova
 │   ├── bsod-analyzer\SKILL.md    # Veština za plave ekrane
@@ -56,8 +58,15 @@ USB:\ServisAI\
 │   ├── malware-triage\SKILL.md   # Veština za analizu malvera
 │   └── usb-defense\SKILL.md      # Veština za samoodbranu i samočišćenje fleša
 │
+├── devices\                      # Automatski kreirani servisni kartoni i odvojeni cetovi po masinama
+│   └── <DeviceTag>\              # npr. LENOVO_ThinkPad-T14_PF2A1234
+│       ├── DEVICE_INFO.md        # Hardverska specifikacija (CPU, RAM, GPU, diskovi, serijski broj)
+│       ├── SERVISNI_DNEVNIK.md   # Hronologija poseta i intervencija za ovaj racunar
+│       ├── reports\              # Dijagnosticki izvestaji vezani iskljucivo za ovu masinu
+│       └── sessions\             # Istorija cetova i konverzacija za ovaj racunar
+│
 ├── data\                         # Korisnički profil i trajno sačuvana prijava sesije
-│   └── .gemini\                  # Izolovani tokeni (ne ostaju na računaru klijenta)
+│   └── .gemini\                  # Izolovani tokeni (deljeni za sve masine, nema ponovnog logovanja)
 │
 └── second_brain\                 # Inženjerska dokumentacija projekta
     └── AI_Agent_Guidelines.md    # Standardi rada, bezbednosti i koda

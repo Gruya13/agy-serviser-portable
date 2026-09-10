@@ -44,5 +44,19 @@ Ovaj dokument sadrži hronološki pregled svih implementacija, refaktorisanja i 
 - **Kompletan priručnik u Markdown formatu:**
   - Kreiran fajl `UPUTSTVO_ZA_KORISCENJE.md` koji detaljno objašnjava arhitekturu, jednokratnu pripremu USB diska, preuzimanje i postavljanje `agy.exe`, jednokratnu trajnu prijavu preko telefona, proceduru pokretanja na klijentskim mašinama, katalog svih 6 servisnih veština sa primerima upita, USB samoodbranu i rešavanje problema (troubleshooting).
 
+### [2026-09-10 19:24] - Implementacija detekcije uređaja po serijskom broju i odvajanje četova po mašinama
+- **Automatska identifikacija klijentskog računara (`Get-DeviceInfo.ps1`):**
+  - Implementirano automatsko očitavanje serijskog broja iz BIOS-a (za brendirane laptopove/desktop mašine), matične ploče (za desktop računare) i hardverskog UUID-a kao fallback mehanizma.
+  - Očitavanje kompletne hardverske specifikacije (CPU, RAM, GPU, diskovi, OS).
+- **Servisni kartoni i odvajanje sesija (`devices/<DeviceTag>/`):**
+  - Automatsko kreiranje foldera za svaki pojedinačni računar sa `DEVICE_INFO.md` i `SERVISNI_DNEVNIK.md`.
+  - Odvajanje radnog prostora i četova po mašinama – svaka mašina ima svoju istoriju i konverzacije.
+  - Zadržavanje deljenog login tokena u `data/` tako da se ne zahteva ponovna autorizacija telefonom.
+- **Upravljanje povratnicima u servisu:**
+  - `Start-ServisAI.ps1` detektuje da li je računar već bio na servisu i nudi meni: nastavak prethodnog razgovora (`agy -c`) ili nova servisna sesija.
+- **Nova veština `device-audit` i ažuriranje `AGENTS.md`:**
+  - Dodata veština za analizu i osvežavanje hardverske karte računara.
+
+
 
 

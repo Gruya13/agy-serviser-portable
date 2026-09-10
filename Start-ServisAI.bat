@@ -2,11 +2,14 @@
 setlocal EnableDelayedExpansion
 title Pokretanje Servis AI Asistenta...
 
+:: Postavljanje UTF-8 kodne stranice (sprecava ANSI wrap bagove i preskakanje redova)
+chcp 65001 >nul
+
 :: 1. Provera administratorskih privilegija
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo [!] Skripta zahteva administratorska prava za servisnu dijagnostiku.
-    echo [*] Pokrecem zahtev za pisenje privilegija (UAC)...
+    echo [*] Pokrecem zahtev za povisenje privilegija (UAC)...
     powershell.exe -NoProfile -Command "Start-Process cmd.exe -ArgumentList '/k \"\"%~f0\"\"' -Verb RunAs"
     exit /b
 )
@@ -14,7 +17,7 @@ if %errorlevel% neq 0 (
 :: 2. Postavljanje radnog direktorijuma na lokaciju ove skripte
 cd /d "%~dp0"
 
-:: 3. Pozivanje glavnog PowerShell orkestratora
+:: 3. Pozivanje glavnog PowerShell orkestratora sa optimizovanim baferom
 echo [*] Pokrecem Servis AI Asistenta...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Start-ServisAI.ps1"
 

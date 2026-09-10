@@ -57,6 +57,14 @@ Ovaj dokument sadrži hronološki pregled svih implementacija, refaktorisanja i 
 - **Nova veština `device-audit` i ažuriranje `AGENTS.md`:**
   - Dodata veština za analizu i osvežavanje hardverske karte računara.
 
+### [2026-09-10 19:27] - Otklanjanje problema sa preskakanjem redova u konzoli (Terminal Buffer Glitch)
+- **Konzolna i bafer optimizacija (`Start-ServisAI.ps1` i `Start-ServisAI.bat`):**
+  - Implementirana striktna sinhronizacija `BufferSize.Width = WindowSize.Width` i uvećanje visine bafera na 9000 linija. Ovo eliminiše bag gde conhost umeće 20-30 praznih linija usled nepoklapanja širine prozora i bafera.
+  - Postavljeno UTF-8 kodiranje (`[Console]::OutputEncoding`, `chcp 65001`), `TERM=xterm-256color` i `PAGER=cat`.
+- **Ažuriranje `AGENTS.md` (Pravilo kompaktnosti i snimanja izveštaja):**
+  - Definisano pravilo da agent ne šalje višestruke prazne linije i da svaki kompletan dijagnostički izveštaj automatski sačuva u `reports\IZVESTAJ_DIJAGNOSTIKE.md` na USB-u, a serviseru prikaže jasan sažetak u konzoli.
+
+
 
 
 

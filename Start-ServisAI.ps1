@@ -19,6 +19,27 @@ param (
 $Host.UI.RawUI.WindowTitle = "Servis AI Asistent - Antigravity CLI Portable"
 Clear-Host
 
+# 0. Konfiguracija UTF-8 i bafera konzole (Eliminise ANSI wrap bug i preskakanje praznih redova)
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    [Console]::InputEncoding  = [System.Text.Encoding]::UTF8
+    
+    if ($Host.UI.RawUI) {
+        $raw = $Host.UI.RawUI
+        $winWidth = $raw.WindowSize.Width
+        if ($winWidth -gt 0) {
+            $buf = $raw.BufferSize
+            # Kljucno: Buffer Width MORA biti identican Window Width da se spreci skakanje kursora
+            $buf.Width = $winWidth
+            if ($buf.Height -lt 9000) { $buf.Height = 9000 }
+            $raw.BufferSize = $buf
+        }
+    }
+} catch {}
+
+$env:TERM = "xterm-256color"
+$env:PAGER = "cat"
+
 Write-Host "==================================================================" -ForegroundColor Cyan
 Write-Host "         ANTIGRAVITY CLI PORTABLE - SERVISNI ASISTENT             " -ForegroundColor Yellow
 Write-Host "           Google AI Pro Tehnologija za Servisnu Dijagnostiku     " -ForegroundColor Cyan
@@ -178,6 +199,18 @@ Write-Host "------------------------------------------------------------------" 
 
 # 8. Pokretanje sesije u radnom prostoru uredjaja
 try {
+    # Osiguravanje tacne sirine bafera neposredno pre starta (sprecava prelamanje i prazne linije)
+    try {
+        if ($Host.UI.RawUI) {
+            $w = $Host.UI.RawUI.WindowSize.Width
+            if ($w -gt 0) {
+                $b = $Host.UI.RawUI.BufferSize
+                $b.Width = $w
+                $Host.UI.RawUI.BufferSize = $b
+            }
+        }
+    } catch {}
+
     Set-Location $workDir
     Write-Host "[*] Pokrecem Antigravity CLI sesiju za ovaj uredjaj... (izlaz: /exit ili Ctrl+D)" -ForegroundColor Yellow
     Write-Host ""

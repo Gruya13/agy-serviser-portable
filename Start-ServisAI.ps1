@@ -2,14 +2,15 @@
 .SYNOPSIS
     Glavni orkestrator za Antigravity CLI Prenosivi Servisni Asistent.
 .DESCRIPTION
-    Ova skripta proverava internet vezu, detektuje radni medijum (Write-Protect podrška),
-    izoluje korisnički profil, pokreće Antigravity CLI u headless režimu
-    i osigurava automatsku odjavu i čišćenje privremenih tragova sa klijentske mašine.
+    Ova skripta proverava internet vezu, detektuje radni medijum,
+    aktivira USB samozaštitu i samočišćenje od virusa, izoluje korisnički profil,
+    omogućava trajnu prijavu na otključanom USB-u i osigurava čist izlaz.
 #>
 
 [CmdletBinding()]
 param (
     [switch]$ForceTempProfile,
+    [switch]$Logout,
     [string]$Model
 )
 
@@ -22,10 +23,11 @@ Write-Host "           Google AI Pro Tehnologija za Servisnu Dijagnostiku     " 
 Write-Host "==================================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# 1. Provera postojanja agy.exe
 $scriptDir = $PSScriptRoot
 $binPath = Join-Path $scriptDir "bin\agy.exe"
+$protectScript = Join-Path $scriptDir "scripts\Protect-USBIntegrity.ps1"
 
+# 1. Provera postojanja agy.exe
 if (-not (Test-Path $binPath)) {
     Write-Host "[X] GRESKA: Nije pronadjen fajl 'bin\agy.exe'!" -ForegroundColor Red
     Write-Host "    Molimo vas da preuzmete Antigravity CLI za Windows i smestite ga u:" -ForegroundColor Yellow
@@ -36,7 +38,14 @@ if (-not (Test-Path $binPath)) {
     exit 1
 }
 
-# 2. Provera internet konekcije
+# 2. USB Samozastita i Imunizacija (Pre-run provera)
+if (Test-Path $protectScript) {
+    Write-Host "[*] Pokrecem USB samozastitu i proveru integriteta medijuma..." -ForegroundColor Yellow
+    & $protectScript -Vaccinate -AutoClean
+    Write-Host ""
+}
+
+# 3. Provera internet konekcije
 Write-Host "[*] Provera internet veze sa servisima..." -NoNewline
 $hasInternet = $false
 try {
@@ -61,7 +70,7 @@ if ($hasInternet) {
     }
 }
 
-# 3. Detekcija Write-Protect statusa USB-a i odredjivanje profila
+# 4. Detekcija Write-Protect statusa USB-a i odredjivanje profila
 $isReadOnly = $false
 $testFile = Join-Path $scriptDir (".write_test_" + [guid]::NewGuid().ToString().Substring(0, 6))
 
@@ -81,18 +90,17 @@ if ($isReadOnly -or $ForceTempProfile) {
     $isUsingTemp = $true
     $tempFolderName = "ServisAI_" + [guid]::NewGuid().ToString().Substring(0, 8)
     $profileDir = Join-Path $env:TEMP $tempFolderName
-    Write-Host "[*] Detektovan Write-Protect USB medijum ili je ukljucen privremeni rezim." -ForegroundColor Magenta
-    Write-Host "[*] Koristi se izolovani privremeni profil: $profileDir" -ForegroundColor Gray
+    Write-Host "[*] Koristi se izolovani privremeni profil: $profileDir" -ForegroundColor Magenta
 } else {
     $profileDir = Join-Path $scriptDir "data"
-    Write-Host "[*] Koristi se prenosivi profil na USB medijumu: $profileDir" -ForegroundColor Green
+    Write-Host "[*] Koristi se prenosivi profil na USB medijumu (Trajna sesija): $profileDir" -ForegroundColor Green
 }
 
 if (-not (Test-Path $profileDir)) {
     New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
 }
 
-# 4. Postavljanje izolacije okruzenja
+# 5. Postavljanje izolacije okruzenja
 $originalUserProfile = $env:USERPROFILE
 $originalHome = $env:HOME
 $originalSSHClient = $env:SSH_CLIENT
@@ -101,21 +109,21 @@ $originalSSHTTY = $env:SSH_TTY
 $env:USERPROFILE = $profileDir
 $env:HOME = $profileDir
 
-# Forsiranje headless/remote autorizacije (sprecava pokretanje klijentskog browsera)
+# Forsiranje headless/remote autorizacije ako nismo ulogovani (sprecava pokretanje klijentskog browsera)
 $env:SSH_CLIENT = "127.0.0.1 12345 22"
 $env:SSH_TTY = "/dev/pts/0"
 
 Write-Host "[*] Headless OAuth zastita aktivna (autorizacija se vrsi preko telefona)." -ForegroundColor Cyan
 Write-Host "------------------------------------------------------------------" -ForegroundColor DarkGray
 
-# 5. Priprema argumenata za Antigravity CLI
+# 6. Priprema argumenata za Antigravity CLI
 $cliArgs = @()
 if ($Model) {
     $cliArgs += "--model"
     $cliArgs += $Model
 }
 
-# 6. Pokretanje sesije
+# 7. Pokretanje sesije
 try {
     Set-Location $scriptDir
     Write-Host "[*] Pokrecem Antigravity CLI sesiju... (za izlaz unesite /exit ili Ctrl+D)" -ForegroundColor Yellow
@@ -124,14 +132,16 @@ try {
 } finally {
     Write-Host ""
     Write-Host "------------------------------------------------------------------" -ForegroundColor DarkGray
-    Write-Host "[*] Zavrsavanje sesije i pokretanje bezbednosnog ciscenja..." -ForegroundColor Cyan
+    Write-Host "[*] Zavrsavanje sesije i post-sesijsko ciscenje..." -ForegroundColor Cyan
 
-    # Odjava naloga preko CLI
-    try {
-        & $binPath "/logout" 2>$null | Out-Null
-        Write-Host "[OK] Uspesno izvrsena odjava Google naloga (/logout)." -ForegroundColor Green
-    } catch {
-        Write-Host "[!] Odjava preko CLI nije uspela ili je sesija vec prekinuta." -ForegroundColor Yellow
+    # Upravljanje odjavom: odjava se radi ako je koriscen TEMP profil ili ako je eksplicitno zatrazen -Logout
+    if ($isUsingTemp -or $Logout) {
+        try {
+            & $binPath "/logout" 2>$null | Out-Null
+            Write-Host "[OK] Izvrsena odjava Google naloga (/logout)." -ForegroundColor Green
+        } catch {}
+    } else {
+        Write-Host "[OK] Prijava ostaje sacuvana na USB-u za brzi rad na sledecim masinama." -ForegroundColor Green
     }
 
     # Ako je koriscen privremeni profil, brisanje sa klijentskog racunara
@@ -150,5 +160,11 @@ try {
     $env:SSH_CLIENT = $originalSSHClient
     $env:SSH_TTY = $originalSSHTTY
 
-    Write-Host "[OK] Okruzenje vraceno u pocetno stanje." -ForegroundColor Green
+    # Zavrsno samociscenje USB-a (neutralisanje malvera koji je klijent mozda pokusao da upise)
+    if (Test-Path $protectScript) {
+        Write-Host "[*] Pokrecem zavrsno samociscenje USB medijuma..." -ForegroundColor Yellow
+        & $protectScript -AutoClean
+    }
+
+    Write-Host "[OK] Servisna sesija je bezbedno zavrsena." -ForegroundColor Green
 }

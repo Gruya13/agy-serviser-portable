@@ -29,3 +29,15 @@ Ovaj dokument sadrži hronološki pregled svih implementacija, refaktorisanja i 
   - Kreiran `README.md` sa detaljnim koracima pripreme i korišćenja USB alata.
   - Konfigurisan `.gitignore` radi zaštite sesija, keša i tokena.
 
+### [2026-09-10 16:04] - Implementacija USB samozaštite, imunizacije i trajne prijave
+- **Trajna prijava na otključanom flešu:**
+  - Ažuriran `Start-ServisAI.ps1` tako da ne vrši automatsku odjavu kada se koristi `data/` profil na USB-u. Serviser se prijavljuje samo jednom, a na narednim klijentskim mašinama CLI odmah startuje bez verifikacije telefonom.
+- **USB samoodbrana i auto-čišćenje (`Protect-USBIntegrity.ps1`):**
+  - Implementirana skripta za automatsko otkrivanje i brisanje USB crva, lažnih `.lnk` prečica, `.vbs` skripti i zalutalih `.exe` datoteka.
+  - Ugrađena USB vakcinacija (zaštićen `autorun.inf` direktorijum sa blokiranim atributima).
+  - Mehanizam heš provere (SHA-256) ključnih fajlova protiv modifikacija.
+- **Integracija u pokretač i veštine:**
+  - `Start-ServisAI.ps1` automatski pokreće imunizaciju i čišćenje pre starta i nakon završetka svake dijagnostičke sesije.
+  - Kreirana nova veština `usb-defense` u `.agents/skills/usb-defense/` i `skills/usb-defense/`, a `AGENTS.md` je proširen ovom komandom.
+
+

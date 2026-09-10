@@ -9,7 +9,9 @@ Sistem pokreće zvanični **Antigravity CLI (`agy`)** povezan sa vašom **Google
 ## Ključne mogućnosti
 
 - **Zero-Trust autorizacija preko telefona:** Klijentski računar nikada ne vidi vašu Google lozinku. Autorizacija se vrši skeniranjem linka/koda na vašem telefonu.
-- **Hardware Write-Protect podrška:** Ako koristite fleš sa prekidačem za zaključavanje upisa, privremeni tokeni se smeštaju u `%TEMP%` klijenta i automatski brišu pri zatvaranju.
+- **Trajna prijava na otključanom USB-u:** Jednom se prijavite u svojoj radionici, a na svim klijentskim mašinama radite odmah bez ponovnog korišćenja telefona.
+- **Automatska USB samoodbrana i samočišćenje:** Pre i posle svake sesije, sistem skenira USB na viruse, uklanja maliciozne prečice (`.lnk`), sumnjive skripte i vakciniše `autorun.inf`.
+- **Hardware Write-Protect podrška:** Ako se koristi zaključani fleš, profil se smešta u `%TEMP%` klijenta i automatski samouništava pri zatvaranju.
 - **Root-Cause analiza:** AI agent fokusiran na pronalaženje tačnog uzroka kvara umesto generičkih saveta.
 - **Strogo Non-Destructive pravilo:** Agent nikada ne vrši izmene na sistemu klijenta bez vaše eksplicitne potvrde.
 - **Ugrađene servisne veštine (Skills):**
@@ -18,6 +20,7 @@ Sistem pokreće zvanični **Antigravity CLI (`agy`)** povezan sa vašom **Google
   - `/bsod-analyzer` - Analiza uzroka rušenja sistema i Minidump datoteka.
   - `/system-integrity` - Bezbedna kontrola integriteta sistema (SFC / DISM).
   - `/malware-triage` - Detekcija sumnjivih autorun unosa, skripti i procesa.
+  - `/usb-defense` - Skeniranje i automatsko čišćenje USB medijuma od malvera.
 
 ---
 

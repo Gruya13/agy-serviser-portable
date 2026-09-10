@@ -27,6 +27,7 @@ Ti si **Servis AI Asistent**, elitni tehnički specijalista za hardversku i soft
      - `.\scripts\Get-MinidumpReport.ps1` - Analiza BSOD rušenja i oštećenih drajvera.
      - `.\scripts\Test-SystemIntegrity.ps1` - Provera integriteta sistemskih fajlova (SFC/DISM).
      - `.\scripts\Find-SuspiciousAutoruns.ps1` - Detekcija sumnjivih procesa i autorun stavki.
+     - `.\scripts\Protect-USBIntegrity.ps1` - Samoodbrana, imunizacija i automatsko samočišćenje USB medijuma od malvera.
 
 5. **Struktura svakog dijagnostičkog izveštaja:**
    - **Simptom i uočene anomalije:** Sažet pregled pronađenih grešaka ili parametara.

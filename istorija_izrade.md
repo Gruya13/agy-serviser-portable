@@ -64,6 +64,16 @@ Ovaj dokument sadrži hronološki pregled svih implementacija, refaktorisanja i 
 - **Ažuriranje `AGENTS.md` (Pravilo kompaktnosti i snimanja izveštaja):**
   - Definisano pravilo da agent ne šalje višestruke prazne linije i da svaki kompletan dijagnostički izveštaj automatski sačuva u `reports\IZVESTAJ_DIJAGNOSTIKE.md` na USB-u, a serviseru prikaže jasan sažetak u konzoli.
 
+### [2026-09-10 19:35] - Ispravka naglog zatvaranja prozora (Fix CMD Crash i UAC NoExit osigurač)
+- **Uzrok baga:** Poziv `chcp 65001` unutar samog `.bat` fajla je u Windows CMD-u izazivao prekid parsiranja skripte i naglo gašenje konzole.
+- **Ispravka `Start-ServisAI.bat`:**
+  - Uklonjen `chcp` iz batch fajla (UTF-8 se postavlja bezbedno unutar PowerShell-a).
+  - Dodat `-NoExit` osigurač za PowerShell koji onemogućava samovoljno zatvaranje prozora čak i ako skripta naiđe na prekid.
+- **Ispravka `Start-ServisAI.ps1`:**
+  - Zadržan radni direktorijum u korenu alata (`$scriptDir`) sa dodavanjem foldera uređaja preko `--add-dir`, kako bi `agy` uvek video `config/settings.json` i veštine.
+  - Zaštićen opcioni nastavak sesije (`-c`) markerom `.has_session` kako se CLI ne bi rušio ako prethodna sesija ne postoji.
+
+
 
 
 

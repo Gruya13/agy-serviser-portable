@@ -1,0 +1,31 @@
+# Antigravity CLI Portable - Git Ignore
+
+# Korisnički profil i sesije (privatni podaci i tokeni)
+data/
+.gemini/
+.antigravity/
+*.token
+*.session
+
+# Izvršni fajlovi (veliki binarni fajlovi se preuzimaju na USB)
+bin/*.exe
+!bin/README_BIN.md
+
+# Logovi i privremeni fajlovi
+logs/
+*.log
+*.tmp
+*.bak
+temp/
+tmp/
+
+# Windows sistemski fajlovi
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Skripte generisani izveštaji
+reports/
+*.dmp
+*.evtx

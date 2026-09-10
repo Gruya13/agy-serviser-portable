@@ -40,4 +40,9 @@ Ovaj dokument sadrži hronološki pregled svih implementacija, refaktorisanja i 
   - `Start-ServisAI.ps1` automatski pokreće imunizaciju i čišćenje pre starta i nakon završetka svake dijagnostičke sesije.
   - Kreirana nova veština `usb-defense` u `.agents/skills/usb-defense/` i `skills/usb-defense/`, a `AGENTS.md` je proširen ovom komandom.
 
+### [2026-09-10 16:05] - Izrada sveobuhvatnog servisnog priručnika (UPUTSTVO_ZA_KORISCENJE.md)
+- **Kompletan priručnik u Markdown formatu:**
+  - Kreiran fajl `UPUTSTVO_ZA_KORISCENJE.md` koji detaljno objašnjava arhitekturu, jednokratnu pripremu USB diska, preuzimanje i postavljanje `agy.exe`, jednokratnu trajnu prijavu preko telefona, proceduru pokretanja na klijentskim mašinama, katalog svih 6 servisnih veština sa primerima upita, USB samoodbranu i rešavanje problema (troubleshooting).
+
+
 

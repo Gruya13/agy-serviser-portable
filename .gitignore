@@ -7,6 +7,14 @@ data/
 *.token
 *.session
 
+# Servisni kartoni klijentskih računara i offline red čekanja (privatni podaci klijenata)
+devices/
+pending_sync/
+
+# Lokalno generisane kontrolne sume i USB vakcinacija
+config/checksums.json
+autorun.inf/
+
 # Izvršni fajlovi (veliki binarni fajlovi se preuzimaju na USB)
 bin/*.exe
 !bin/README_BIN.md
@@ -19,13 +27,18 @@ logs/
 temp/
 tmp/
 
+# Python test keš
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
 # Windows sistemski fajlovi
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
-# Skripte generisani izveštaji
+# Skripte generisani izveštaji i dumpovi
 reports/
 *.dmp
 *.evtx

@@ -12,6 +12,7 @@
 param (
     [switch]$ForceTempProfile,
     [switch]$Logout,
+    [switch]$Fallback,
     [string]$Model
 )
 
@@ -42,10 +43,11 @@ Write-Host "           Google AI Pro Tehnologija za Servisnu Dijagnostiku     " 
 Write-Host "==================================================================" -ForegroundColor Cyan
 Write-Host ""
 
-$scriptDir = $PSScriptRoot
+$scriptDir = $PSScriptRoot.TrimEnd('\')
 $binPath = Join-Path $scriptDir "bin\agy.exe"
 $protectScript = Join-Path $scriptDir "scripts\Protect-USBIntegrity.ps1"
 $deviceScript = Join-Path $scriptDir "scripts\Get-DeviceInfo.ps1"
+$syncScript = Join-Path $scriptDir "scripts\Sync-ServiceHub.ps1"
 
 # 1. Provera postojanja agy.exe
 if (-not (Test-Path $binPath)) {
@@ -107,6 +109,44 @@ try {
     $isReadOnly = $true
 }
 
+$accountsDir = Join-Path $scriptDir "data\accounts"
+$primaryDir  = Join-Path $accountsDir "primary"
+$fallbackDir = Join-Path $accountsDir "fallback"
+
+# Odabir izvornog naloga na USB-u
+$selectedSourceDir = ""
+if ($Fallback) {
+    if (Test-Path $fallbackDir) {
+        $selectedSourceDir = $fallbackDir
+        Write-Host "[*] Izabran REZERVNI (fallback) servisni nalog na USB-u." -ForegroundColor Cyan
+    } else {
+        $selectedSourceDir = Join-Path $scriptDir "data"
+        Write-Host "[*] Izabran podrazumevani prenosivi profil na USB medijumu." -ForegroundColor Green
+    }
+} elseif (Test-Path $primaryDir) {
+    $primaryToken = Join-Path $primaryDir ".gemini\antigravity-cli\jetski-standalone-oauth-token"
+    if (-not (Test-Path $primaryToken)) {
+        $primaryToken = Join-Path $primaryDir ".gemini\antigravity-cli\antigravity-oauth-token"
+    }
+
+    if (Test-Path $primaryToken) {
+        $selectedSourceDir = $primaryDir
+        Write-Host "[*] Izabran PRIMARNI servisni nalog na USB medijumu." -ForegroundColor Green
+    } elseif (Test-Path $fallbackDir) {
+        $selectedSourceDir = $fallbackDir
+        Write-Host "[!] Primarni nalog nije pronadjen. Automatski se bira REZERVNI servisni nalog..." -ForegroundColor Yellow
+    } else {
+        $selectedSourceDir = Join-Path $scriptDir "data"
+        Write-Host "[*] Izabran podrazumevani profil na USB medijumu." -ForegroundColor Green
+    }
+} elseif (Test-Path $fallbackDir) {
+    $selectedSourceDir = $fallbackDir
+    Write-Host "[*] Izabran REZERVNI servisni nalog na USB-u." -ForegroundColor Cyan
+} else {
+    $selectedSourceDir = Join-Path $scriptDir "data"
+    Write-Host "[*] Koristi se podrazumevani profil na USB medijumu." -ForegroundColor Green
+}
+
 $isUsingTemp = $false
 $profileDir = ""
 
@@ -114,10 +154,16 @@ if ($isReadOnly -or $ForceTempProfile) {
     $isUsingTemp = $true
     $tempFolderName = "ServisAI_" + [guid]::NewGuid().ToString().Substring(0, 8)
     $profileDir = Join-Path $env:TEMP $tempFolderName
-    Write-Host "[*] Koristi se izolovani privremeni profil: $profileDir" -ForegroundColor Magenta
+    New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
+    
+    # Preslikavanje naloga sa USB-a u privremeni profil radi nesmetanog rada
+    if ($selectedSourceDir -and (Test-Path $selectedSourceDir)) {
+        Copy-Item -Path "$selectedSourceDir\*" -Destination $profileDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host "[*] USB je Read-Only. Aktiviran prenosivi privremeni profil sa tokenima: $profileDir" -ForegroundColor Magenta
 } else {
-    $profileDir = Join-Path $scriptDir "data"
-    Write-Host "[*] Koristi se prenosivi profil na USB medijumu (Trajna sesija): $profileDir" -ForegroundColor Green
+    $profileDir = $selectedSourceDir
+    Write-Host "[*] Aktivna trajna sesija sa USB medijuma: $profileDir" -ForegroundColor Green
 }
 
 if (-not (Test-Path $profileDir)) {
@@ -149,23 +195,86 @@ if (Test-Path $deviceScript) {
         # Postavljanje promenljivih okruzenja za agenta
         $env:CURRENT_DEVICE_DIR = $device.DeviceFolder
         $env:CURRENT_DEVICE_TAG = $device.DeviceTag
+
+        # Pre-flight sinhronizacija i provera servisne istorije na centralnom Servis Hub-u
+        if (Test-Path $syncScript) {
+            Write-Host "[*] Provera servisne istorije na centralnom Servis Hub-u..." -ForegroundColor Yellow
+            try {
+                $hubHistory = & $syncScript -Pull -DeviceTag $device.DeviceTag -SerialNumber $device.SerialNumber -DeviceFolder $device.DeviceFolder
+                if ($hubHistory -and $hubHistory.is_registered) {
+                    $env:SERVIS_HUB_HISTORY_AVAILABLE = "true"
+                    Write-Host "[OK] Servisna istorija uspesno ucitana u radni prostor agenta." -ForegroundColor Green
+                } else {
+                    Write-Host "[*] Uredjaj se prvi put evidentira. Pokrecem automatsku Pre-flight registraciju na Hub-u..." -ForegroundColor Cyan
+                    & $syncScript -Register -DeviceTag $device.DeviceTag -SerialNumber $device.SerialNumber -DeviceFolder $device.DeviceFolder -Status "U_DIJAGNOSTICI"
+                    $env:SERVIS_HUB_HISTORY_AVAILABLE = "false"
+                }
+            } catch {
+                Write-Host "[!] Upozorenje pri komunikaciji sa Servis Hub-om: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+        }
     }
 }
 
-# 6. Postavljanje izolacije okruzenja
-$originalUserProfile = $env:USERPROFILE
-$originalHome = $env:HOME
-$originalSSHClient = $env:SSH_CLIENT
-$originalSSHTTY = $env:SSH_TTY
+# 6. Postavljanje izolacije okruzenja i uskladjivanje sa Windows OS
+$originalUserProfile   = $env:USERPROFILE
+$originalHome          = $env:HOME
+$originalHomeDrive     = $env:HOMEDRIVE
+$originalHomePath      = $env:HOMEPATH
+$originalAppData       = $env:APPDATA
+$originalLocalAppData  = $env:LOCALAPPDATA
+$originalSSHClient     = $env:SSH_CLIENT
+$originalSSHConnection = $env:SSH_CONNECTION
+$originalSSHTTY        = $env:SSH_TTY
 
 $env:USERPROFILE = $profileDir
-$env:HOME = $profileDir
+$env:HOME        = $profileDir
 
-# Forsiranje headless/remote autorizacije
-$env:SSH_CLIENT = "127.0.0.1 12345 22"
-$env:SSH_TTY = "/dev/pts/0"
+# Uskladjivanje HOMEDRIVE i HOMEPATH za Go i Win32 runtime
+if ($profileDir -match '^([A-Za-z]:)(.*)$') {
+    $env:HOMEDRIVE = $matches[1]
+    $env:HOMEPATH  = $matches[2]
+}
 
-Write-Host "[*] Headless OAuth zastita aktivna (autorizacija se vrsi preko telefona)." -ForegroundColor Cyan
+# Postavljanje APPDATA i LOCALAPPDATA na profil (sa kreiranjem podfoldera)
+$roamingDir = Join-Path $profileDir "AppData\Roaming"
+$localDir   = Join-Path $profileDir "AppData\Local"
+if (-not (Test-Path $roamingDir)) { New-Item -ItemType Directory -Path $roamingDir -Force | Out-Null }
+if (-not (Test-Path $localDir))   { New-Item -ItemType Directory -Path $localDir -Force | Out-Null }
+$env:APPDATA      = $roamingDir
+$env:LOCALAPPDATA = $localDir
+
+# Forsiranje headless/remote autorizacije (zaobilazi lokalni keyring i forsira file token storage)
+$env:SSH_CLIENT     = "127.0.0.1 12345 22"
+$env:SSH_CONNECTION = "127.0.0.1 12345 127.0.0.1 22"
+$env:SSH_TTY        = "/dev/pts/0"
+
+# SMART TOKEN BRIDGE: Ako agy.exe na Windows-u poziva Win32 API GetUserProfileDirectoryW,
+# osiguravamo da privremeno vidi tokene i na lokalnom klijentskom profilu tokom trajanja sesije
+$clientUserProfile = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::UserProfile)
+$injectedClientTokens = $false
+$clientGeminiCliDir = ""
+
+if ($clientUserProfile -and (Test-Path $clientUserProfile)) {
+    $clientGeminiCliDir = Join-Path $clientUserProfile ".gemini\antigravity-cli"
+    $clientTokenFile = Join-Path $clientGeminiCliDir "jetski-standalone-oauth-token"
+    
+    if (-not (Test-Path $clientTokenFile)) {
+        try {
+            $srcTokenDir = Join-Path $profileDir ".gemini\antigravity-cli"
+            if (Test-Path $srcTokenDir) {
+                if (-not (Test-Path $clientGeminiCliDir)) {
+                    New-Item -ItemType Directory -Path $clientGeminiCliDir -Force | Out-Null
+                }
+                Copy-Item -Path "$srcTokenDir\*" -Destination $clientGeminiCliDir -Recurse -Force -ErrorAction Stop
+                $injectedClientTokens = $true
+                Write-Host "[*] Uspešno postavljen privremeni most akreditiva za lokalni Windows profil." -ForegroundColor DarkCyan
+            }
+        } catch {
+            Write-Host "[!] Napomena pri postavljanju mosta akreditiva: $($_.Exception.Message)" -ForegroundColor DarkGray
+        }
+    }
+}
 
 # 7. Priprema argumenata za Antigravity CLI
 $cliArgs = @()
@@ -225,8 +334,8 @@ try {
     Write-Host "------------------------------------------------------------------" -ForegroundColor DarkGray
     Write-Host "[*] Zavrsavanje sesije i post-sesijsko ciscenje..." -ForegroundColor Cyan
 
-    # Upravljanje odjavom: odjava se radi ako je koriscen TEMP profil ili ako je eksplicitno zatrazen -Logout
-    if ($isUsingTemp -or $Logout) {
+    # Upravljanje odjavom: odjava se radi SAMO ako je eksplicitno zatrazen -Logout
+    if ($Logout) {
         try {
             & $binPath "/logout" 2>$null | Out-Null
             Write-Host "[OK] Izvrsena odjava Google naloga (/logout)." -ForegroundColor Green
@@ -235,21 +344,51 @@ try {
         Write-Host "[OK] Prijava ostaje sacuvana na USB-u za brzi rad na sledecim masinama." -ForegroundColor Green
     }
 
+    # Bezbedno ciscenje privremenog mosta akreditiva sa klijentskog racunara (Zero-trace)
+    if ($injectedClientTokens -and $clientGeminiCliDir -and (Test-Path $clientGeminiCliDir)) {
+        try {
+            # Ako je agy.exe osvezio tokene u klijentskom profilu, vrati ih nazad na USB
+            $usbTokenDir = Join-Path $profileDir ".gemini\antigravity-cli"
+            if (Test-Path $usbTokenDir) {
+                Copy-Item -Path "$clientGeminiCliDir\*" -Destination $usbTokenDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            Remove-Item -Path $clientGeminiCliDir -Recurse -Force -ErrorAction Stop
+            Write-Host "[OK] Privremeni most akreditiva bezbedno uklonjen sa klijentskog racunara (Zero-trace)." -ForegroundColor Green
+        } catch {
+            Write-Host "[!] Upozorenje pri ciscenju mosta akreditiva: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+
     # Ako je koriscen privremeni profil, brisanje sa klijentskog racunara
     if ($isUsingTemp -and (Test-Path $profileDir)) {
         try {
             Remove-Item -Path $profileDir -Recurse -Force -ErrorAction Stop
-            Write-Host "[OK] Privremeni radni profil obrisan sa klijentskog racunara (Nema tragova)." -ForegroundColor Green
+            Write-Host "[OK] Privremeni radni profil obrisan sa klijentskog racunara." -ForegroundColor Green
         } catch {
             Write-Host "[!] Upozorenje: Neki privremeni fajlovi nisu mogli biti obrisani: $($_.Exception.Message)" -ForegroundColor Yellow
         }
     }
 
     # Vracanje originalnih varijabli okruzenja
-    $env:USERPROFILE = $originalUserProfile
-    $env:HOME = $originalHome
-    $env:SSH_CLIENT = $originalSSHClient
-    $env:SSH_TTY = $originalSSHTTY
+    $env:USERPROFILE   = $originalUserProfile
+    $env:HOME          = $originalHome
+    $env:HOMEDRIVE     = $originalHomeDrive
+    $env:HOMEPATH      = $originalHomePath
+    $env:APPDATA       = $originalAppData
+    $env:LOCALAPPDATA  = $originalLocalAppData
+    $env:SSH_CLIENT     = $originalSSHClient
+    $env:SSH_CONNECTION = $originalSSHConnection
+    $env:SSH_TTY        = $originalSSHTTY
+
+    # Sinhronizacija servisnog kartona i sesije na Servis Hub
+    if ($device -and (Test-Path $syncScript)) {
+        Write-Host "[*] Sinhronizacija servisnog kartona i sesije na Servis Hub..." -ForegroundColor Yellow
+        try {
+            & $syncScript -Push -DeviceTag $device.DeviceTag -SerialNumber $device.SerialNumber -DeviceFolder $device.DeviceFolder
+        } catch {
+            Write-Host "[!] Upozorenje pri slanju podataka na Servis Hub: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
 
     # Zavrsno samociscenje USB-a (neutralisanje malvera koji je klijent mozda pokusao da upise)
     if (Test-Path $protectScript) {

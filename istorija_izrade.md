@@ -73,8 +73,70 @@ Ovaj dokument sadrži hronološki pregled svih implementacija, refaktorisanja i 
   - Zadržan radni direktorijum u korenu alata (`$scriptDir`) sa dodavanjem foldera uređaja preko `--add-dir`, kako bi `agy` uvek video `config/settings.json` i veštine.
   - Zaštićen opcioni nastavak sesije (`-c`) markerom `.has_session` kako se CLI ne bi rušio ako prethodna sesija ne postoji.
 
+### [2026-10-09 16:15] - Implementacija dvosmerne sinhronizacije servisne istorije sa centralnim Servis Hub-om (ADR-0003)
+- **Koncept i Arhitektura (ADR-0003):**
+  - Uspostavljena dvosmerna integracija između prenosivog asistenta na USB medijumu i centralnog radioničkog servera Servis Hub.
+  - Eliminisana izolovanost nalaza na pojedinačnom flešu: prenos servisne istorije omogućava serviserima uvid u prethodne kvarove i intervencije kolega na istom računaru.
+- **Implementacija na Servis Hub-u (`Servis Hub`):**
+  - `servishub/reports.py`: Implementirane metode `save_agy_session()` i `get_device_history()` za perzistenciju sesija u `storage/reports/<DeviceTag>/sessions/`, automatsko ažuriranje `DEVICE_INFO.json` profila i kumulativno dopunjavanje centralnog `SERVISNI_DNEVNIK.md`.
+  - `servishub/handlers.py`: Dodate REST API rute `GET /api/devices/{tag}/history` (i pretraga po serijskom broju `GET /api/devices/by-serial/{serial}/history`) za Pre-flight očitavanje istorije, i `POST /api/devices/{tag}/agy-session` za Post-flight prijem završene dijagnostičke sesije.
+  - `servishub/telemetry.py`: Prošireno upravljanje flotom računara (`FleetStore`) gde se servisirani uređaji automatski registruju i osvežavaju sa statusom `"Servisiran (AGY)"` ili `"Kvar (AGY)"` uz direktan uvid u nalaze na Web Dashboard-u.
+  - `tests/test_agy_sync_api.py`: Integracioni testovi za kompletnu pokrivenost novih ruta, validaciju JSON tela i kumulativno dopunjavanje dnevnika.
+- **Implementacija na AGY Serviseru (`AGY Serviser Portable`):**
+  - `scripts/Sync-ServiceHub.ps1`: Glavni PowerShell klijentski modul sa:
+    - UDP Auto-Discovery pretragom Servis Hub-a na portu 8888 (`Find-ServisHubUdp`) i automatskim prelaskom na statički URL (`Resolve-HubUrl`).
+    - Pre-flight Pull mehanizmom (`-Pull`) za očitavanje i formatiran prikaz istorije u terminalu pre ulaska u asistenta.
+    - Post-flight Push mehanizmom (`-Push`) za automatsko pakovanje hardverskog profila, dnevnika i izveštaja po završetku sesije.
+    - Offline redom čekanja (`pending_sync/`) i mehanizmom pražnjenja (`-FlushPending`) pri ponovnom uspostavljanju veze.
+  - `Start-ServisAI.ps1`:
+    - Integrisana Pre-flight provera pre pokretanja CLI-ja (postavljanje varijable okruženja `$env:SERVIS_HUB_HISTORY_AVAILABLE = "true"` ako računar ima prethodnih zapisa).
+    - Integrisan Post-flight Push u `finally` bloku orkestratora po završetku sesije.
+  - `config/settings.json`: Dodat konfiguracioni blok `servis_hub` (`auto_discovery: true`, `discovery_port: 8888`, `static_url: "http://localhost:8000"`).
+  - `tests/test_e2e_sync.py`: Sveobuhvatni E2E integracioni testovi (Scenario 1: Online životni ciklus, Scenario 2: Offline queuing, Scenario 3: Flush offline reda, višestruke sesije i otpornost na greške).
+  - `tests/test_sync.ps1`: PowerShell testna skripta za verifikaciju klijentske skripte `Sync-ServiceHub.ps1`.
+- **Verifikacija i QA test faza:**
+  - QA test faza uspešno završena sa 100% prolaznošću:
+    - **Servis Hub:** 32/32 testa uspešno prošlo (`python3 -m unittest discover -s tests -p "test_*.py"`).
+    - **AGY Serviser:** 6/6 E2E integracionih scenarija uspešno prošlo (`python3 -m unittest tests/test_e2e_sync.py`).
+- **Dokumentacija (Documentation Gate):**
+  - Ažuriran `AGENTS.md` (sekcije 4 i 5) sa uputstvima za rad sa Servis Hub istorijom i skriptom `Sync-ServiceHub.ps1`.
+  - Proširen `UPUTSTVO_ZA_KORISCENJE.md` novom sekcijom 8 posvećenom Servis Hub integraciji, auto-discovery mehanizmu i offline radu.
+  - Ažuriran `README.md` sa novom stavkom u ključnim mogućnostima i dopunjenim stablom USB diska.
 
+### [2026-10-09 19:15] - Izrada sveobuhvatne tehničke dokumentacije i lokalne Obsidian memorije
+- **Kompletna tehnička dokumentacija (`TEHNICKA_DOKUMENTACIJA.md`):**
+  - Izrađen sveobuhvatni inženjerski referentni priručnik (11 poglavlja) sa detaljnim opisom arhitekture, podsistema, bezbednosti, Zero-Trust autorizacije, CIM fingerprinting algoritma, dijagnostičkih skripti, kataloga veština, ADR-0003 protokola sinhronizacije (UDP :8888, REST, Offline queue), QA testova i operativnog runbook-a.
+  - Integrisani detaljni Mermaid dijagrami arhitekture, životnog ciklusa sesije, detekcije serijskih brojeva i mrežne sinhronizacije.
+- **Inicijalizacija i popunjavanje Obsidian memorije (`wiki/`):**
+  - `wiki/architecture/overview.md`: Šestoslojni arhitektonski model i tokovi podataka.
+  - `wiki/decisions/ADR-0001-portable-usb-architecture.md`: Go binarni CLI vs desktop, nula zavisnosti, headless OAuth.
+  - `wiki/decisions/ADR-0002-hardware-write-protect-and-device-fingerprint.md`: HW Write-Protect detekcija, %TEMP% sandbox, očitavanje serijskih brojeva i izolacija radnih prostora (`devices/<DeviceTag>/`).
+  - `wiki/decisions/ADR-0003-servis-hub-bidirectional-sync.md`: Specifikacija dvosmerne sinhronizacije sesija, UDP Auto-Discovery i offline reda čekanja.
+  - `wiki/domain/glossary.md`: Kompletiran rečnik domena sa preko 20 stručnih pojmova.
+  - `wiki/memory/gotchas.md`: Dokumentovane zamke (conhost bafer neslaganje, cmd crash pri chcp 65001, generički serijski brojevi, HW write-protect ograničenja).
+  - `wiki/index.md`: Ažuriran MOC indeks sa unakrsnim vezama ka svoj dokumentaciji.
 
-
-
+### [2026-10-10 17:30] - Implementacija ADR-0004: Pre-Flight Auto-Registracija, Kontekstni Izvodi i In-Flight Checkpoint Sinhronizacija
+- **Servis Hub Server proširenja (`servishub/`):**
+  - Implementirana nova ruta `POST /api/devices/{tag}/register` za trenutno otvaranje digitalnog kartona novog računara pre startovanja AGY sesije (`DEVICE_INFO.json`, inicijalni `SERVISNI_DNEVNIK.md`, status `U_DIJAGNOSTICI`).
+  - Implementirana nova ruta `POST /api/devices/{tag}/checkpoint` za perzistenciju međurezultata tokom dijagnostike i dinamičko ažuriranje statusa flote u `FleetStore` (`Kvar (AGY)`, `Servisiran (AGY)`, `Čeka delove (AGY)`).
+- **AGY Serviser Klijent unapređenja (`scripts/` i `Start-ServisAI.ps1`):**
+  - `Sync-ServiceHub.ps1`:
+    - Dodato generisanje `devices/<DeviceTag>/SERVIS_HUB_HISTORY.md` iz preuzete istorije, omogućavajući AI asistentu trenutan uvid u prethodne radove kolega i recidivne kvarove.
+    - Implementiran inteligentni Merge (spajanje) dnevnika sa Hub-a u lokalni `SERVISNI_DNEVNIK.md` bez brisanja i dupliranja.
+    - Implementirana pretraga sa rezervnim fallback-om po serijskom broju (`/api/devices/by-serial/{serial}/history`).
+    - Dodate funkcije `Invoke-HubRegister` (`-Register`) i `Invoke-HubCheckpoint` (`-Checkpoint`).
+    - Proširen `Invoke-HubFlushPending` za procesiranje zaostalih paketa tipa `_REGISTER_` i `_CHECKPOINT_`.
+  - `scripts/Save-ServiceProgress.ps1`:
+    - Kreirana namenska skripta koju AI asistent poziva čim otkrije kvar ili završi ključnu fazu dijagnostike.
+  - `Start-ServisAI.ps1`:
+    - U pre-flight fazi automatski poziva registraciju na Hub-u ako uređaj prethodno nije evidentiran.
+  - `AGENTS.md`:
+    - Ažurirana pravila za obavezno čitanje `SERVIS_HUB_HISTORY.md` i okidanje checkpointa preko `Save-ServiceProgress.ps1`.
+- **QA Verifikacija i E2E Testovi:**
+  - `tests/test_e2e_sync.py`: Proširen sa 6 na 11 sveobuhvatnih integracionih scenarija (11/11 PASSED).
+  - `Servis Hub` test suite: 214/214 PASSED.
+- **Arhitektonska Baza Znanja (Wiki):**
+  - Kreiran `wiki/decisions/ADR-0004-preflight-registration-and-live-checkpoint.md`.
+  - Ažuriran `wiki/index.md` i `README.md`.
 

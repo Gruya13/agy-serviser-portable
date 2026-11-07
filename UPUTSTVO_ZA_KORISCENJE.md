@@ -15,7 +15,8 @@ Sistem koristi zvanični terminalski agent **Antigravity CLI (`agy`)** povezan s
 5. [Katalog servisnih veština (Skills) i primeri upita](#5-katalog-servisnih-veština-skills-i-primeri-upita)
 6. [Bezbednosni mehanizmi i samoodbrana USB-a](#6-bezbednosni-mehanizmi-i-samoodbrana-usb-a)
 7. [Režimi rada: Otključan vs Write-Protected fleš](#7-režimi-rada-otključan-vs-write-protected-fleš)
-8. [Česta pitanja i rešavanje problema (Troubleshooting)](#8-česta-pitanja-i-rešavanje-problema-troubleshooting)
+8. [Centralna sinhronizacija sa Servis Hub-om (ADR-0003)](#8-centralna-sinhronizacija-sa-servis-hub-om-adr-0003)
+9. [Česta pitanja i rešavanje problema (Troubleshooting)](#9-česta-pitanja-i-rešavanje-problema-troubleshooting)
 
 ---
 
@@ -27,7 +28,7 @@ Na USB memoriji se nalazi sledeća organizacija datoteka:
 USB:\ServisAI\
 │
 ├── Start-ServisAI.bat            # Brzi dvoklik pokretač (automatska UAC elevacija)
-├── Start-ServisAI.ps1            # Glavni orkestrator (mrežna provera, profil, zaštita)
+├── Start-ServisAI.ps1            # Glavni orkestrator (mrežna provera, profil, zaštita, sync)
 ├── AGENTS.md                     # Glavna sistemska pravila za ponašanje AI agenta
 ├── README.md                     # Osnovni pregled projekta
 ├── UPUTSTVO_ZA_KORISCENJE.md     # Ovaj detaljni priručnik
@@ -38,7 +39,7 @@ USB:\ServisAI\
 │   └── README_BIN.md             # Uputstvo za postavljanje binarnog fajla
 │
 ├── config\                       # Konfiguracija radnog okruženja
-│   └── settings.json             # Postavke modela (gemini-2.5-pro) i pravila rada
+│   └── settings.json             # Postavke modela (gemini-2.5-pro) i Servis Hub postavke
 │
 ├── scripts\                      # Nativne PowerShell servisne dijagnostičke skripte
 │   ├── Get-DeviceInfo.ps1        # Identifikacija serijskog broja i hardverske karte
@@ -47,7 +48,8 @@ USB:\ServisAI\
 │   ├── Get-MinidumpReport.ps1    # Analiza BSOD rušenja i oštećenih drajvera
 │   ├── Test-SystemIntegrity.ps1  # Provera integriteta sistema (SFC / DISM)
 │   ├── Find-SuspiciousAutoruns.ps1 # Detekcija sumnjivih procesa i autorun unosa
-│   └── Protect-USBIntegrity.ps1  # Samoodbrana, imunizacija i čišćenje USB-a
+│   ├── Protect-USBIntegrity.ps1  # Samoodbrana, imunizacija i čišćenje USB-a
+│   └── Sync-ServiceHub.ps1       # Dvosmerna sinhronizacija sa centralnim Servis Hub-om
 │
 ├── .agents\skills\               # Servisne veštine koje agent autonomno koristi
 │   ├── device-audit\SKILL.md     # Veština za hardversku kartu i serijski broj
@@ -64,6 +66,8 @@ USB:\ServisAI\
 │       ├── SERVISNI_DNEVNIK.md   # Hronologija poseta i intervencija za ovaj racunar
 │       ├── reports\              # Dijagnosticki izvestaji vezani iskljucivo za ovu masinu
 │       └── sessions\             # Istorija cetova i konverzacija za ovaj racunar
+│
+├── pending_sync\                 # Lokalni offline red čekanja za sinhronizaciju sesija
 │
 ├── data\                         # Korisnički profil i trajno sačuvana prijava sesije
 │   └── .gemini\                  # Izolovani tokeni (deljeni za sve masine, nema ponovnog logovanja)
@@ -236,7 +240,60 @@ Sistem automatski prilagođava rad zavisno od hardvera vašeg fleša:
 
 ---
 
-## 8. Česta pitanja i rešavanje problema (Troubleshooting)
+## 8. Centralna sinhronizacija sa Servis Hub-om (ADR-0003)
+
+Kako bi se obezbedila centralizovana evidencija svih računara koji prolaze kroz radionicu i omogućila efikasna razmena nalaza među kolegama serviserima, prenosivi asistent poseduje dvosmernu sinhronizaciju sa centralnim **Servis Hub** serverom putem skripte `.\scripts\Sync-ServiceHub.ps1`.
+
+### 1. Automatski pronalazak servera (UDP Auto-Discovery)
+- Kada je klijentski računar povezan na lokalnu mrežu servisa (LAN kabl ili servisni Wi-Fi), skripta automatski šalje brzi UDP broadcast upit na port **8888** (`Find-ServisHubUdp`).
+- Centralni Servis Hub momentalno odgovara sa svojom IP adresom i aktivnim HTTP portom (npr. `http://192.168.1.100:8000`).
+- Celokupan proces pronalaska traje manje od 1.5 sekunde i u potpunosti eliminiše potrebu za ručnim kucanjem IP adresa ili prekonfiguracijom alata.
+
+### 2. Rezervna konfiguracija (Statički URL)
+- Ukoliko je na mrežnoj opremi blokiran UDP broadcast, ili serviser radi sa udaljene lokacije preko VPN veze, sistem koristi rezervni statički URL definisan u `config/settings.json`:
+  ```json
+  "servis_hub": {
+    "auto_discovery": true,
+    "discovery_port": 8888,
+    "static_url": "http://localhost:8000"
+  }
+  ```
+- Ako UDP upit ne dobije odgovor u predviđenom roku, skripta se bez zastoja prebacuje na `static_url`.
+
+### 3. Pre-flight Pull (Prikaz istorije pre početka rada)
+- Čim orkestrator (`Start-ServisAI.ps1`) očita serijski broj računara i odredi jedinstvenu oznaku uređaja (`DeviceTag`), automatski pokreće:
+  ```powershell
+  .\scripts\Sync-ServiceHub.ps1 -Pull -DeviceTag <DeviceTag> -SerialNumber <Serial>
+  ```
+- **Šta serviser i agent vide:**
+  - **Poznati računar:** Ako je računar već bio na servisu, u konzoli se iscrtava uokviren žuti pregled sa hronologijom ranijih intervencija, statusom, spiskom pokretanih dijagnostičkih skripti i beleškama kolega.
+  - **Kontekst za AI:** Varijabla okruženja `$env:SERVIS_HUB_HISTORY_AVAILABLE = "true"` obaveštava AI asistenta da obavezno uporedi trenutne simptome kvara sa prethodnim intervencijama (npr. ponovni otkaz istog diska ili ponovno pregrevanje).
+  - **Novi računar:** Servis Hub vraća status da se uređaj prvi put evidentira, što se jasno prikazuje serviseru.
+
+### 4. Post-flight Push (Automatsko slanje završne sesije)
+- Po završetku dijagnostike i izlasku iz asistenta (`/exit`), orkestrator automatski poziva:
+  ```powershell
+  .\scripts\Sync-ServiceHub.ps1 -Push -DeviceFolder <Path>
+  ```
+- Skripta automatski formira strukturirani JSON paket koji sadrži:
+  - Hardversku specifikaciju iz `DEVICE_INFO.md` (CPU, RAM, GPU, diskovi, serijski broj, BIOS).
+  - Poslednji zapis u servisnom dnevniku `SERVISNI_DNEVNIK.md`.
+  - Kompletan dijagnostički izveštaj iz `reports/IZVESTAJ_DIJAGNOSTIKE.md` (sažetak kvara, alati i status: `COMPLETED`, `WARNING`, `CRITICAL_ISSUE`).
+- Paket se šalje na Servis Hub (`POST /api/devices/{tag}/agy-session`), gde se trajno arhivira u `storage/reports/<DeviceTag>/`, a status računara se odmah osvežava u veb kontrolnoj tabli radionice.
+
+### 5. Rad na terenu bez mreže (Offline Queue & Auto-Flush)
+- Kada se servis obavlja na terenu bez pristupa mreži radionice:
+  - Skripta detektuje da server nije dostupan i **nastavlja rad bez ikakvog prekida ili blokiranja servisera**.
+  - Završena sesija se automatski smešta u lokalni offline red čekanja: `pending_sync\<timestamp>_<tag>.json` na USB-u (odnosno u `%TEMP%\pending_sync` ako je fleš hardverski zaključan).
+  - Pri prvom sledećem pokretanju asistenta na mreži gde je Servis Hub dostupan, skripta vrši **automatski flush**, šalje sve zaostale sesije na server i bezbedno briše lokalne privremene pakete.
+  - Serviser takođe može ručno isprazniti red čekanja u bilo kom trenutku komandom:
+    ```powershell
+    .\scripts\Sync-ServiceHub.ps1 -FlushPending
+    ```
+
+---
+
+## 9. Česta pitanja i rešavanje problema (Troubleshooting)
 
 ### Šta ako računar klijenta nema internet?
 - Antigravity CLI komunicira sa velikim Google AI Pro modelom u oblaku, pa je internet veza neophodna za rad samog asistenta.

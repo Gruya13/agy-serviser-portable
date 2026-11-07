@@ -2,5 +2,10 @@
   "model": "gemini-2.5-pro",
   "theme": "dark",
   "telemetry": false,
-  "system_instructions_file": "AGENTS.md"
+  "system_instructions_file": "AGENTS.md",
+  "servis_hub": {
+    "auto_discovery": true,
+    "discovery_port": 8888,
+    "static_url": "http://localhost:8000"
+  }
 }

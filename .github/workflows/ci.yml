@@ -1,0 +1,25 @@
+name: E2E Sync & Integrity Tests
+
+on:
+  push:
+    branches: [ main, master, development ]
+  pull_request:
+    branches: [ main, master, development ]
+
+jobs:
+  e2e-tests:
+    name: E2E Protocol Verification (11 Scenarios)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run E2E Sync & ADR-0003/0004 Test Suite
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 -m unittest discover -s tests -p "test_*.py" -v
